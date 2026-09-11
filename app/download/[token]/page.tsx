@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 
 export default function DownloadPage({
     params,
 }: {
-    params: { token: string };
+    params: Promise<{ token: string }>;
 }) {
+    const { token } = use(params);
+
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
@@ -27,19 +29,21 @@ export default function DownloadPage({
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    token: params.token,
-                    password,
+                    token: token,
+                    password: password,
                 }),
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || "認証に失敗しました");
+                throw new Error(
+                    data.error || "認証に失敗しました"
+                );
             }
 
-            // 認証成功 → Vercel経由でダウンロード
-            window.location.href = `/api/file/${params.token}`;
+            // 認証成功 → Vercel経由で画像取得
+            window.location.href = `/api/file/${token}`;
 
         } catch (e) {
             setError(
