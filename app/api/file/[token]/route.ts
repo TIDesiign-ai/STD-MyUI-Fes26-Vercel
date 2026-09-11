@@ -4,11 +4,13 @@ const FILE_SERVER_URL = process.env.FILE_SERVER_URL!;
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const { token } = await params;
+
     const response = await fetch(
-      `${FILE_SERVER_URL}/download/${params.token}`,
+      `${FILE_SERVER_URL}/download/${token}`,
       {
         cache: "no-store",
       }
@@ -28,9 +30,10 @@ export async function GET(
         response.headers.get("Content-Type") || "image/png",
 
                         "Content-Disposition":
-                        `attachment; filename="${params.token}.png"`,
+                        `attachment; filename="${token}.png"`,
 
-                        "Cache-Control": "no-store",
+                        "Cache-Control":
+                        "no-store, no-cache, must-revalidate",
       },
     });
   } catch (error) {
