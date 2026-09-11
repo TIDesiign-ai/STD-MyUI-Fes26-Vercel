@@ -10,14 +10,16 @@ export async function GET(
     const { token } = await params;
 
     const response = await fetch(
-      `${FILE_SERVER_URL}/download/${token}`,
+      `${FILE_SERVER_URL}/file/${token}`,
       {
         cache: "no-store",
       }
     );
 
     if (!response.ok) {
-      return new Response("画像が見つかりません", {
+      const text = await response.text();
+
+      return new Response(text || "画像が見つかりません", {
         status: response.status,
       });
     }
@@ -25,19 +27,21 @@ export async function GET(
     const image = await response.arrayBuffer();
 
     return new Response(image, {
+      status: 200,
       headers: {
         "Content-Type":
-        response.headers.get("Content-Type") || "image/png",
+        response.headers.get("Content-Type") ||
+        "image/png",
 
-                        "Content-Disposition":
-                        `attachment; filename="${token}.png"`,
+        "Content-Disposition":
+        'attachment; filename="generated.png"',
 
-                        "Cache-Control":
-                        "no-store, no-cache, must-revalidate",
+        "Cache-Control":
+        "no-store, no-cache, must-revalidate",
       },
     });
   } catch (error) {
-    console.error("DOWNLOAD ERROR:", error);
+    console.error("FILE PROXY ERROR:", error);
 
     return new Response(
       "ファイルサーバーに接続できません",

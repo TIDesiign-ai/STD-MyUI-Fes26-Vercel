@@ -4,19 +4,19 @@ const FILE_SERVER_URL = process.env.FILE_SERVER_URL!;
 
 export async function POST(request: NextRequest) {
   try {
-    const { password } = await request.json();
+    const { token, password } = await request.json();
 
-    if (!password) {
+    if (!token || !password) {
       return NextResponse.json(
         {
-          error: "パスワードが必要です",
+          error: "tokenとパスワードが必要です",
         },
         { status: 400 }
       );
     }
 
     const response = await fetch(
-      `${FILE_SERVER_URL}/verify`,
+      `${FILE_SERVER_URL}/verify/${token}`,
       {
         method: "POST",
         headers: {
@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           password,
         }),
+        cache: "no-store",
       }
     );
 
@@ -45,18 +46,17 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      download_url: `/api/file/${token}`,
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("VERIFY ERROR:", error);
 
     return NextResponse.json(
       {
         error: "ファイルサーバーに接続できません",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
