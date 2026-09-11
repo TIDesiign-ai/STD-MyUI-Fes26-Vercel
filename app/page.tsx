@@ -128,22 +128,19 @@ export default function Home() {
         }
 
         setGenerating(true);
-        setMessage("生成しています...");
+        setMessage("Forgeで生成しています...");
         setResult("");
 
         try {
-            /*
-             * 次の段階で
-             *
-             * POST /api/generate
-             *
-             * にこのFormDataを送る
-             */
-
             const formData = new FormData();
 
             formData.append("image", image);
-            formData.append("prompt", prompt);
+
+            formData.append(
+                "prompt",
+                prompt
+            );
+
             formData.append(
                 "negative_prompt",
                 negativePrompt
@@ -179,33 +176,43 @@ export default function Home() {
                 sampler
             );
 
-            console.log(
-                "GENERATE REQUEST",
-                Object.fromEntries(formData.entries())
+            const response = await fetch(
+                "/api/generate",
+                {
+                    method: "POST",
+                    body: formData,
+                }
             );
 
-            /*
-             * 仮動作
-             *
-             * Forge API接続は次の段階で実装
-             */
+            const data = await response.json();
 
-            await new Promise((resolve) =>
-            setTimeout(resolve, 1000)
-            );
+            if (!response.ok) {
+                throw new Error(
+                    data.error ||
+                    "画像生成に失敗しました"
+                );
+            }
+
+            setResult(data.image);
 
             setMessage(
-                "UI完成。次にForge APIへ接続します。"
+                "画像生成が完了しました"
             );
 
         } catch (error) {
+
             console.error(error);
 
             setMessage(
-                "生成中にエラーが発生しました"
+                error instanceof Error
+                ? error.message
+                : "生成中にエラーが発生しました"
             );
+
         } finally {
+
             setGenerating(false);
+
         }
     };
 
