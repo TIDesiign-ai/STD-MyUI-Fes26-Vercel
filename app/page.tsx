@@ -39,7 +39,7 @@ export default function DownloadPage({
       }
 
       // 認証成功 → ファイルサーバーから直接ダウンロード
-      window.location.href = data.download_url;
+      window.location.href = `/api/file/${params.token}`;
 
     } catch (e) {
       setError(

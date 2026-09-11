@@ -1,81 +1,35 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
-const FILE_SERVER_URL =
-  process.env.FILE_SERVER_URL!;
+const FILE_SERVER_URL = process.env.FILE_SERVER_URL!;
 
-export async function POST(
-  request: NextRequest
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { token: string } }
 ) {
-  try {
-    const { token, password } =
-      await request.json();
-
-    if (!token || !password) {
-      return NextResponse.json(
-        {
-          error: "tokenとパスワードが必要です",
-        },
-        { status: 400 }
-      );
+  const response = await fetch(
+    `${FILE_SERVER_URL}/download/${params.token}`,
+    {
+      cache: "no-store",
     }
+  );
 
-    const response = await fetch(
-      `${FILE_SERVER_URL}/verify/${token}`,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          password,
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return NextResponse.json(
-        {
-          error:
-            data.detail ||
-            "認証に失敗しました",
-        },
-        {
-          status: response.status,
-        }
-      );
-    }
-
-    /*
-     * Python側から返ってくる
-     *
-     * /file/{token}
-     *
-     * を絶対URLにする
-     */
-
-    const downloadUrl =
-      `${FILE_SERVER_URL}${data.download_url}`;
-
-    return NextResponse.json({
-      download_url: downloadUrl,
+  if (!response.ok) {
+    return new Response("画像が見つかりません", {
+      status: response.status,
     });
-
-  } catch (error) {
-
-    console.error(error);
-
-    return NextResponse.json(
-      {
-        error:
-          "ファイルサーバーに接続できません",
-      },
-      {
-        status: 500,
-      }
-    );
   }
+
+  const image = await response.arrayBuffer();
+
+  return new Response(image, {
+    headers: {
+      "Content-Type":
+      response.headers.get("Content-Type") || "image/png",
+
+                      "Content-Disposition":
+                      `attachment; filename="${params.token}.png"`,
+
+                      "Cache-Control": "no-store",
+    },
+  });
 }
