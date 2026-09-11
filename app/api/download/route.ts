@@ -1,33 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const FILE_SERVER_URL =
-process.env.FILE_SERVER_URL!;
+const FILE_SERVER_URL = process.env.FILE_SERVER_URL!;
 
-export async function POST(
-  request: NextRequest
-) {
+export async function POST(request: NextRequest) {
   try {
-    const { token, password } =
-    await request.json();
+    const { password } = await request.json();
 
-    if (!token || !password) {
+    if (!password) {
       return NextResponse.json(
         {
-          error: "tokenとパスワードが必要です",
+          error: "パスワードが必要です",
         },
         { status: 400 }
       );
     }
 
     const response = await fetch(
-      `${FILE_SERVER_URL}/verify/${token}`,
+      `${FILE_SERVER_URL}/verify`,
       {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify({
           password,
         }),
@@ -49,29 +43,16 @@ export async function POST(
       );
     }
 
-    /*
-     * Python側から返ってくる
-     *
-     * /file/{token}
-     *
-     * を絶対URLにする
-     */
-
-    const downloadUrl =
-    `${FILE_SERVER_URL}${data.download_url}`;
-
     return NextResponse.json({
-      download_url: downloadUrl,
+      success: true,
     });
 
   } catch (error) {
-
     console.error(error);
 
     return NextResponse.json(
       {
-        error:
-        "ファイルサーバーに接続できません",
+        error: "ファイルサーバーに接続できません",
       },
       {
         status: 500,
