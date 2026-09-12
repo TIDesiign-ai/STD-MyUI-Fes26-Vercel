@@ -1,24 +1,121 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const FORGE_URL = process.env.FORGE_URL;
+type ForgeServer = {
+    id: string;
+    url: string;
+};
 
-export async function POST(request: NextRequest) {
+// =========================================================
+// Forgeサーバー一覧
+// =========================================================
+
+function getForgeServers(): ForgeServer[] {
+    const servers: ForgeServer[] = [];
+
+    for (let i = 1; i <= 40; i++) {
+        const id = String(i).padStart(2, "0");
+
+        const url =
+        process.env[`FORGE_${id}_URL`];
+
+        if (url) {
+            servers.push({
+                id,
+                url: url.replace(/\/+$/, ""),
+            });
+        }
+    }
+
+    // 40台設定していない場合の互換用
+    if (servers.length === 0) {
+        const fallback =
+        process.env.FORGE_URL;
+
+        if (fallback) {
+            servers.push({
+                id: "01",
+                url: fallback.replace(/\/+$/, ""),
+            });
+        }
+    }
+
+    return servers;
+}
+
+
+// =========================================================
+// サーバーをシャッフル
+// =========================================================
+
+function shuffle<T>(array: T[]): T[] {
+    const result = [...array];
+
+    for (
+        let i = result.length - 1;
+    i > 0;
+    i--
+    ) {
+        const j = Math.floor(
+            Math.random() * (i + 1)
+        );
+
+        [
+            result[i],
+            result[j],
+        ] = [
+            result[j],
+            result[i],
+        ];
+    }
+
+    return result;
+}
+
+
+// =========================================================
+// POST /api/generate
+// =========================================================
+
+export async function POST(
+    request: NextRequest
+) {
     try {
-        if (!FORGE_URL) {
+
+        // =====================================================
+        // Forge一覧取得
+        // =====================================================
+
+        const servers =
+        getForgeServers();
+
+        if (servers.length === 0) {
             return NextResponse.json(
                 {
-                    error: "FORGE_URL が設定されていません",
+                    error:
+                    "Forgeサーバーが設定されていません",
                 },
                 { status: 500 }
             );
         }
 
-        const formData = await request.formData();
 
-        const image = formData.get("image");
-        const prompt = formData.get("prompt");
+        // =====================================================
+        // FormData
+        // =====================================================
+
+        const formData =
+        await request.formData();
+
+        const image =
+        formData.get("image");
+
+        const prompt =
+        formData.get("prompt");
+
         const negativePrompt =
-        formData.get("negative_prompt");
+        formData.get(
+            "negative_prompt"
+        );
 
         const steps = Number(
             formData.get("steps") ?? 20
@@ -28,8 +125,11 @@ export async function POST(request: NextRequest) {
             formData.get("cfg_scale") ?? 7
         );
 
-        const denoisingStrength = Number(
-            formData.get("denoising_strength") ?? 0.6
+        const denoisingStrength =
+        Number(
+            formData.get(
+                "denoising_strength"
+            ) ?? 0.6
         );
 
         const width = Number(
@@ -46,10 +146,16 @@ export async function POST(request: NextRequest) {
                 "DPM++ 2M Karras"
         );
 
+
+        // =====================================================
+        // 入力チェック
+        // =====================================================
+
         if (!(image instanceof File)) {
             return NextResponse.json(
                 {
-                    error: "画像がありません",
+                    error:
+                    "画像がありません",
                 },
                 { status: 400 }
             );
@@ -58,15 +164,17 @@ export async function POST(request: NextRequest) {
         if (!prompt) {
             return NextResponse.json(
                 {
-                    error: "Promptがありません",
+                    error:
+                    "Promptがありません",
                 },
                 { status: 400 }
             );
         }
 
-        // =========================================
+
+        // =====================================================
         // 画像 → Base64
-        // =========================================
+        // =====================================================
 
         const imageBuffer =
         Buffer.from(
@@ -74,91 +182,228 @@ export async function POST(request: NextRequest) {
         );
 
         const imageBase64 =
-        imageBuffer.toString("base64");
-
-        // =========================================
-        // Forge img2img
-        // =========================================
-
-        const response = await fetch(
-            `${FORGE_URL}/sdapi/v1/img2img`,
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json",
-                },
-
-                body: JSON.stringify({
-                    init_images: [
-                        imageBase64,
-                    ],
-
-                    prompt: String(prompt),
-
-                                     negative_prompt:
-                                     String(negativePrompt ?? ""),
-
-                                     steps,
-
-                                     cfg_scale: cfgScale,
-
-                                     denoising_strength:
-                                     denoisingStrength,
-
-                                     width,
-
-                                     height,
-
-                                     sampler_name: sampler,
-                }),
-            }
+        imageBuffer.toString(
+            "base64"
         );
 
-        if (!response.ok) {
-            const errorText =
-            await response.text();
 
-            console.error(
-                "Forge error:",
-                errorText
-            );
+        // =====================================================
+        // Forge用JSON
+        // =====================================================
 
-            return NextResponse.json(
-                {
-                    error:
-                    "Forgeで画像生成に失敗しました",
-                    detail: errorText,
-                },
-                { status: 502 }
-            );
+        const forgeBody = {
+            init_images: [
+                imageBase64,
+            ],
+
+            prompt: String(prompt),
+
+            negative_prompt:
+            String(
+                negativePrompt ?? ""
+            ),
+
+            steps,
+
+            cfg_scale: cfgScale,
+
+            denoising_strength:
+            denoisingStrength,
+
+            width,
+
+            height,
+
+            sampler_name: sampler,
+        };
+
+
+        // =====================================================
+        // サーバーをシャッフル
+        //
+        // 毎回同じGPUに集中しないようにする
+        // =====================================================
+
+        const candidates =
+        shuffle(servers);
+
+
+        console.log(
+            "Forge candidates:",
+            candidates.map(
+                (server) =>
+                server.id
+            )
+        );
+
+
+        // =====================================================
+        // Forgeへ送信
+        // =====================================================
+
+        let lastError:
+        | unknown = null;
+
+        for (const server of candidates) {
+
+            try {
+
+                console.log(
+                    `[Forge ${server.id}] generating...`
+                );
+
+
+                const response =
+                await fetch(
+                    `${server.url}/sdapi/v1/img2img`,
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                            "application/json",
+                        },
+
+                        body: JSON.stringify(
+                            forgeBody
+                        ),
+
+                        // 長時間生成対策
+                        signal:
+                        AbortSignal.timeout(
+                            10 * 60 * 1000
+                        ),
+                    }
+                );
+
+
+                // =================================================
+                // Forge HTTPエラー
+                // =================================================
+
+                if (!response.ok) {
+
+                    const errorText =
+                    await response.text();
+
+                    console.error(
+                        `[Forge ${server.id}] HTTP ${response.status}`,
+                        errorText
+                    );
+
+                    /*
+                     * Forgeがちゃんと応答した場合は、
+                     * 別GPUへ勝手に再送しない。
+                     *
+                     * 生成処理が実行済みの可能性があるため。
+                     */
+
+                    return NextResponse.json(
+                        {
+                            error:
+                            "Forgeで画像生成に失敗しました",
+
+                            server:
+                            server.id,
+
+                            detail:
+                            errorText,
+                        },
+                        {
+                            status: 502,
+                        }
+                    );
+                }
+
+
+                // =================================================
+                // JSON
+                // =================================================
+
+                const data =
+                await response.json();
+
+
+                if (
+                    !data.images ||
+                    !data.images.length
+                ) {
+
+                    return NextResponse.json(
+                        {
+                            error:
+                            "Forgeから画像が返ってきませんでした",
+
+                            server:
+                            server.id,
+                        },
+                        {
+                            status: 502,
+                        }
+                    );
+                }
+
+
+                console.log(
+                    `[Forge ${server.id}] generation complete`
+                );
+
+
+                // =================================================
+                // 成功
+                // =================================================
+
+                return NextResponse.json({
+                    success: true,
+
+                    server:
+                    server.id,
+
+                    image:
+                    `data:image/png;base64,${data.images[0]}`,
+                });
+
+            } catch (error) {
+
+                // =================================================
+                // 接続失敗
+                // =================================================
+
+                console.error(
+                    `[Forge ${server.id}] connection failed`,
+                    error
+                );
+
+                lastError = error;
+
+                /*
+                 * サーバー自体に接続できない場合は
+                 * 次のForgeへ。
+                 */
+
+                continue;
+            }
         }
 
-        const data = await response.json();
 
-        // =========================================
-        // Forge結果確認
-        // =========================================
+        // =====================================================
+        // 全Forge失敗
+        // =====================================================
 
-        if (
-            !data.images ||
-            !data.images.length
-        ) {
-            return NextResponse.json(
-                {
-                    error:
-                    "Forgeから画像が返ってきませんでした",
-                },
-                { status: 502 }
-            );
-        }
+        console.error(
+            "All Forge servers failed:",
+            lastError
+        );
 
-        return NextResponse.json({
-            success: true,
-
-            image:
-            `data:image/png;base64,${data.images[0]}`,
-        });
+        return NextResponse.json(
+            {
+                error:
+                "現在利用可能なForgeサーバーがありません",
+            },
+            {
+                status: 503,
+            }
+        );
 
     } catch (error) {
 
@@ -172,7 +417,9 @@ export async function POST(request: NextRequest) {
                 error:
                 "画像生成中にエラーが発生しました",
             },
-            { status: 500 }
+            {
+                status: 500,
+            }
         );
     }
 }
